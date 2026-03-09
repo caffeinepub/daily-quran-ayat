@@ -8,12 +8,23 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
-import { BellRing, ChevronLeft, ChevronRight, Pause, Play } from "lucide-react";
+import {
+  BellRing,
+  BookCheck,
+  BookOpen,
+  CheckCircle2,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  ChevronUp,
+} from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { JumpToFilter } from "./components/JumpToFilter";
 import { useActor } from "./hooks/useActor";
 import { useGetAyatByIndex, useGetTotalAyat } from "./hooks/useQueries";
+import { useReadingProgress } from "./hooks/useReadingProgress";
 import { LOCAL_AYAT } from "./utils/localAyatData";
+import { PARA_LIST, SURAH_LIST } from "./utils/quranData";
 
 // ============================================================
 // Decorative Components
@@ -359,41 +370,350 @@ function CandleDecor() {
   );
 }
 
-function FlowerBorder() {
-  const flowers = ["🌸", "🌺", "🌼", "🌻", "🌷", "💐", "🌹", "🏵️"];
+// ============================================================
+// Reading Progress Bar — always visible below header
+// ============================================================
+
+interface ReadingProgressBarProps {
+  completedCount: number;
+  totalSurahs: number;
+  completedParas: Set<number>;
+  totalParas: number;
+}
+
+function ReadingProgressBar({
+  completedCount,
+  totalSurahs,
+  completedParas,
+  totalParas,
+}: ReadingProgressBarProps) {
+  const pct = Math.round((completedCount / totalSurahs) * 100);
+
   return (
-    <div aria-hidden="true">
-      {/* Left flower column */}
-      <div className="fixed left-1 top-20 hidden md:flex flex-col gap-4 pointer-events-none z-0 opacity-60">
-        {flowers.slice(0, 5).map((f, i) => (
+    <div
+      data-ocid="progress.bar"
+      className="relative z-10 px-4 py-3"
+      style={{
+        background: "oklch(var(--card) / 0.85)",
+        borderBottom: "1px solid oklch(var(--gold) / 0.2)",
+        backdropFilter: "blur(4px)",
+      }}
+    >
+      <div className="max-w-3xl mx-auto">
+        {/* Text row */}
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-2">
+            <BookCheck
+              size={13}
+              style={{ color: "oklch(var(--gold))" }}
+              aria-hidden="true"
+            />
+            <span
+              className="text-xs font-semibold tracking-wide"
+              style={{
+                color: "oklch(var(--gold))",
+                fontFamily: "'Playfair Display', Georgia, serif",
+              }}
+            >
+              Reading Progress
+            </span>
+          </div>
           <span
-            key={`left-${f}`}
+            className="text-xs font-medium"
             style={{
-              fontSize: "1.4rem",
-              animationDelay: `${i * 0.5}s`,
-              animation: "glow-orb 3s ease-in-out infinite",
+              color: "oklch(var(--muted-foreground))",
+              fontFamily: "'Playfair Display', Georgia, serif",
+            }}
+            aria-live="polite"
+          >
+            {completedCount} of {totalSurahs} Surahs · {completedParas.size} of{" "}
+            {totalParas} Paras completed
+          </span>
+        </div>
+
+        {/* Gold shimmer progress bar */}
+        <div
+          className="relative overflow-hidden rounded-full"
+          style={{
+            height: "6px",
+            background: "oklch(var(--gold) / 0.12)",
+            border: "1px solid oklch(var(--gold) / 0.2)",
+          }}
+          role="progressbar"
+          tabIndex={0}
+          aria-valuenow={pct}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-label={`${pct}% of Quran completed`}
+        >
+          <div
+            className="h-full rounded-full transition-all duration-700 ease-out"
+            style={{
+              width: `${pct}%`,
+              background:
+                "linear-gradient(90deg, oklch(var(--gold-dim)), oklch(var(--gold-bright)), oklch(var(--gold)))",
+              boxShadow: pct > 0 ? "0 0 8px oklch(var(--gold) / 0.5)" : "none",
+              minWidth: pct > 0 ? "6px" : "0px",
+            }}
+          />
+          {/* Shimmer overlay */}
+          {pct > 0 && (
+            <div
+              className="absolute inset-0 rounded-full"
+              style={{
+                background:
+                  "linear-gradient(90deg, transparent 0%, oklch(1 0 0 / 0.35) 50%, transparent 100%)",
+                backgroundSize: "200% 100%",
+                animation: "shimmer 2.2s infinite",
+              }}
+            />
+          )}
+        </div>
+
+        {/* Percentage */}
+        {completedCount > 0 && (
+          <p
+            className="text-right text-xs mt-1 opacity-60"
+            style={{
+              color: "oklch(var(--gold))",
+              fontFamily: "'Playfair Display', Georgia, serif",
             }}
           >
-            {f}
-          </span>
-        ))}
-      </div>
-      {/* Right flower column */}
-      <div className="fixed right-1 top-20 hidden md:flex flex-col gap-4 pointer-events-none z-0 opacity-60">
-        {flowers.slice(3).map((f, i) => (
-          <span
-            key={`right-${f}`}
-            style={{
-              fontSize: "1.4rem",
-              animationDelay: `${i * 0.6}s`,
-              animation: "glow-orb 3.5s ease-in-out infinite",
-            }}
-          >
-            {f}
-          </span>
-        ))}
+            {pct}% complete
+          </p>
+        )}
       </div>
     </div>
+  );
+}
+
+// ============================================================
+// Progress Panel — collapsible card for detailed progress
+// ============================================================
+
+interface ProgressPanelProps {
+  completedSurahs: Set<number>;
+  completedParas: Set<number>;
+  completedCount: number;
+  totalSurahs: number;
+  totalParas: number;
+  onToggleSurah: (surahNumber: number) => void;
+}
+
+function ProgressPanel({
+  completedSurahs,
+  completedParas,
+  completedCount,
+  totalSurahs,
+  onToggleSurah,
+}: ProgressPanelProps) {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <section
+      data-ocid="progress.panel"
+      className="card-islamic rounded-xl fade-in-up fade-in-up-delay-1"
+      aria-label="Reading progress panel"
+    >
+      {/* Header row — always visible */}
+      <button
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
+        className="w-full flex items-center gap-3 px-5 py-4"
+        aria-expanded={expanded}
+        aria-controls="progress-panel-body"
+        style={{ background: "none", border: "none", cursor: "pointer" }}
+      >
+        <BookCheck
+          size={14}
+          style={{ color: "oklch(var(--gold))", flexShrink: 0 }}
+          aria-hidden="true"
+        />
+        <span
+          className="text-xs font-semibold uppercase tracking-widest flex-1 text-left"
+          style={{
+            color: "oklch(var(--gold))",
+            fontFamily: "'Playfair Display', Georgia, serif",
+          }}
+        >
+          Reading Progress
+        </span>
+        <span
+          className="text-xs font-medium mr-2"
+          style={{
+            color: "oklch(var(--muted-foreground))",
+            fontFamily: "'Playfair Display', Georgia, serif",
+          }}
+        >
+          {completedCount}/{totalSurahs} Surahs
+        </span>
+        {expanded ? (
+          <ChevronUp
+            size={16}
+            style={{ color: "oklch(var(--gold))", flexShrink: 0 }}
+          />
+        ) : (
+          <ChevronDown
+            size={16}
+            style={{ color: "oklch(var(--gold))", flexShrink: 0 }}
+          />
+        )}
+      </button>
+
+      {/* Collapsible body */}
+      {expanded && (
+        <div
+          id="progress-panel-body"
+          className="px-5 pb-5 space-y-6 border-t"
+          style={{ borderColor: "oklch(var(--gold) / 0.15)" }}
+        >
+          {/* Para grid */}
+          <div>
+            <h3
+              className="text-xs font-semibold uppercase tracking-widest mt-4 mb-3"
+              style={{
+                color: "oklch(var(--gold))",
+                fontFamily: "'Playfair Display', Georgia, serif",
+              }}
+            >
+              Para (Juz) Progress
+            </h3>
+            <div
+              data-ocid="progress.para_grid"
+              className="grid grid-cols-5 sm:grid-cols-6 gap-2"
+            >
+              {PARA_LIST.map((para) => {
+                const done = completedParas.has(para.paraNumber);
+                return (
+                  <div
+                    key={para.paraNumber}
+                    title={`Para ${para.paraNumber} — ${para.name}`}
+                    className="flex flex-col items-center justify-center rounded-lg py-2 px-1 text-center transition-all duration-200"
+                    style={{
+                      background: done
+                        ? "oklch(var(--gold) / 0.18)"
+                        : "oklch(var(--muted) / 0.5)",
+                      border: done
+                        ? "1.5px solid oklch(var(--gold) / 0.6)"
+                        : "1.5px solid oklch(var(--border))",
+                      color: done
+                        ? "oklch(var(--gold))"
+                        : "oklch(var(--muted-foreground))",
+                    }}
+                  >
+                    <span
+                      className="text-xs font-bold leading-none"
+                      style={{
+                        fontFamily: "'Playfair Display', Georgia, serif",
+                      }}
+                    >
+                      {para.paraNumber}
+                    </span>
+                    {done && (
+                      <CheckCircle2
+                        size={10}
+                        className="mt-0.5"
+                        style={{ color: "oklch(var(--gold))" }}
+                      />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Surah list */}
+          <div>
+            <h3
+              className="text-xs font-semibold uppercase tracking-widest mb-3"
+              style={{
+                color: "oklch(var(--gold))",
+                fontFamily: "'Playfair Display', Georgia, serif",
+              }}
+            >
+              Surah Progress
+            </h3>
+            <div
+              data-ocid="progress.surah_list"
+              className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 max-h-80 overflow-y-auto pr-1"
+              style={{ scrollbarWidth: "thin" }}
+            >
+              {SURAH_LIST.map((surah) => {
+                const done = completedSurahs.has(surah.surahNumber);
+                return (
+                  <button
+                    key={surah.surahNumber}
+                    type="button"
+                    onClick={() => onToggleSurah(surah.surahNumber)}
+                    className="flex items-center gap-2 rounded-lg px-3 py-2 text-left transition-all duration-150 w-full"
+                    aria-pressed={done}
+                    aria-label={`${done ? "Unmark" : "Mark"} ${surah.name} as complete`}
+                    style={{
+                      background: done
+                        ? "oklch(var(--gold) / 0.12)"
+                        : "transparent",
+                      border: done
+                        ? "1px solid oklch(var(--gold) / 0.4)"
+                        : "1px solid oklch(var(--border) / 0.6)",
+                    }}
+                  >
+                    {/* Number */}
+                    <span
+                      className="text-xs font-bold w-6 text-center flex-shrink-0"
+                      style={{
+                        color: done
+                          ? "oklch(var(--gold))"
+                          : "oklch(var(--muted-foreground))",
+                        fontFamily: "'Playfair Display', Georgia, serif",
+                      }}
+                    >
+                      {surah.surahNumber}
+                    </span>
+                    {/* Name */}
+                    <span
+                      className="flex-1 text-xs font-medium truncate"
+                      style={{
+                        color: done
+                          ? "oklch(var(--foreground))"
+                          : "oklch(var(--muted-foreground))",
+                        fontFamily: "'Playfair Display', Georgia, serif",
+                      }}
+                    >
+                      {surah.name}
+                    </span>
+                    {/* Arabic name */}
+                    <span
+                      className="text-xs arabic-text opacity-60 flex-shrink-0"
+                      lang="ar"
+                      dir="rtl"
+                      style={{ fontSize: "0.7rem" }}
+                    >
+                      {surah.arabicName}
+                    </span>
+                    {/* Checkmark */}
+                    <div className="flex-shrink-0 w-4 h-4 flex items-center justify-center">
+                      {done ? (
+                        <CheckCircle2
+                          size={14}
+                          style={{ color: "oklch(var(--gold))" }}
+                        />
+                      ) : (
+                        <div
+                          className="w-3.5 h-3.5 rounded-full border"
+                          style={{
+                            borderColor: "oklch(var(--muted-foreground) / 0.4)",
+                          }}
+                        />
+                      )}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -465,8 +785,10 @@ function AyatError({ message }: { message: string }) {
 }
 
 // ============================================================
-// Translation Card
+// Translation Card (with inline audio button)
 // ============================================================
+
+type AudioLangCard = "english" | "hindi" | "urdu";
 
 interface TranslationCardProps {
   label: string;
@@ -475,6 +797,8 @@ interface TranslationCardProps {
   isRtl?: boolean;
   textClassName?: string;
   ocid: string;
+  audioLang: AudioLangCard;
+  speechLang: string;
 }
 
 function TranslationCard({
@@ -484,7 +808,45 @@ function TranslationCard({
   isRtl = false,
   textClassName = "",
   ocid,
+  audioLang,
+  speechLang,
 }: TranslationCardProps) {
+  const [isPlaying, setIsPlaying] = useState(false);
+  const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
+
+  // Stop when unmounted
+  useEffect(() => {
+    return () => {
+      if (utteranceRef.current) {
+        window.speechSynthesis.cancel();
+      }
+    };
+  }, []);
+
+  const handleAudio = useCallback(() => {
+    if (isPlaying) {
+      window.speechSynthesis.cancel();
+      setIsPlaying(false);
+      utteranceRef.current = null;
+      return;
+    }
+    const utterance = new SpeechSynthesisUtterance(content);
+    utterance.lang = speechLang;
+    utterance.rate = 0.9;
+    utterance.pitch = 1.0;
+    utterance.onstart = () => setIsPlaying(true);
+    utterance.onend = () => {
+      setIsPlaying(false);
+      utteranceRef.current = null;
+    };
+    utterance.onerror = () => {
+      setIsPlaying(false);
+      utteranceRef.current = null;
+    };
+    utteranceRef.current = utterance;
+    window.speechSynthesis.speak(utterance);
+  }, [isPlaying, content, speechLang]);
+
   return (
     <div
       data-ocid={ocid}
@@ -496,10 +858,35 @@ function TranslationCard({
           {label}
         </span>
         {labelScript && (
-          <span className="text-xs text-gold-dim opacity-75 ml-auto">
+          <span className="text-xs text-gold-dim opacity-75 ml-1">
             {labelScript}
           </span>
         )}
+        {/* Audio button */}
+        <button
+          type="button"
+          data-ocid={`audio.${audioLang}_play_button`}
+          onClick={handleAudio}
+          aria-label={isPlaying ? `Stop ${label} audio` : `Listen in ${label}`}
+          title={isPlaying ? `Stop ${label}` : `Listen in ${label}`}
+          className="ml-auto flex items-center justify-center rounded-full transition-all duration-200"
+          style={{
+            width: "28px",
+            height: "28px",
+            background: isPlaying
+              ? "oklch(var(--gold) / 0.18)"
+              : "oklch(var(--gold) / 0.08)",
+            border: `1.5px solid oklch(var(--gold) / ${isPlaying ? "0.7" : "0.3"})`,
+            color: "oklch(var(--gold))",
+            fontSize: "1rem",
+            flexShrink: 0,
+            animation: isPlaying
+              ? "candle-glow-pulse 1.5s ease-in-out infinite"
+              : "none",
+          }}
+        >
+          🗣️
+        </button>
       </div>
       <p
         className={`text-xl leading-relaxed text-foreground/90 ${textClassName}`}
@@ -509,174 +896,6 @@ function TranslationCard({
         {content}
       </p>
     </div>
-  );
-}
-
-// ============================================================
-// Audio Player Component
-// ============================================================
-
-type AudioLang = "english" | "hindi" | "urdu";
-
-interface AudioPlayerProps {
-  english: string;
-  hindi: string;
-  urdu: string;
-}
-
-function AudioPlayer({ english, hindi, urdu }: AudioPlayerProps) {
-  const [selectedLang, setSelectedLang] = useState<AudioLang>("english");
-  const [isPlaying, setIsPlaying] = useState(false);
-  const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
-
-  const stopSpeech = useCallback(() => {
-    window.speechSynthesis.cancel();
-    setIsPlaying(false);
-    utteranceRef.current = null;
-  }, []);
-
-  // Stop speech when component unmounts
-  useEffect(() => {
-    return () => {
-      window.speechSynthesis.cancel();
-    };
-  }, []);
-
-  const handlePlay = useCallback(() => {
-    if (isPlaying) {
-      stopSpeech();
-      return;
-    }
-
-    const textMap: Record<AudioLang, { text: string; lang: string }> = {
-      english: { text: english, lang: "en-US" },
-      hindi: { text: hindi, lang: "hi-IN" },
-      urdu: { text: urdu, lang: "ur-PK" },
-    };
-
-    const { text, lang } = textMap[selectedLang];
-
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = lang;
-    utterance.rate = 0.9;
-    utterance.pitch = 1.0;
-
-    utterance.onstart = () => setIsPlaying(true);
-    utterance.onend = () => {
-      setIsPlaying(false);
-      utteranceRef.current = null;
-    };
-    utterance.onerror = () => {
-      setIsPlaying(false);
-      utteranceRef.current = null;
-    };
-
-    utteranceRef.current = utterance;
-    window.speechSynthesis.speak(utterance);
-  }, [isPlaying, selectedLang, english, hindi, urdu, stopSpeech]);
-
-  const langButtons: { id: AudioLang; label: string; ocid: string }[] = [
-    { id: "english", label: "English", ocid: "audio.english_tab" },
-    { id: "hindi", label: "हिंदी", ocid: "audio.hindi_tab" },
-    { id: "urdu", label: "اردو", ocid: "audio.urdu_tab" },
-  ];
-
-  return (
-    <section
-      className="card-islamic rounded-xl p-5 fade-in-up fade-in-up-delay-4"
-      aria-label="Audio player"
-    >
-      <div className="flex items-center gap-2 pb-3 mb-4 border-b border-gold/20">
-        <IslamicStar size={12} className="text-gold flex-shrink-0" />
-        <span className="text-xs font-semibold uppercase tracking-widest text-gold">
-          Listen to Translation
-        </span>
-      </div>
-
-      <div className="flex flex-col sm:flex-row items-center gap-4">
-        {/* Language selector buttons */}
-        <fieldset
-          className="flex items-center gap-2 p-1 rounded-lg border-0 m-0 p-0"
-          style={{
-            background: "oklch(var(--gold) / 0.06)",
-            border: "1px solid oklch(var(--gold) / 0.2)",
-            padding: "0.25rem",
-          }}
-          aria-label="Select language for audio"
-        >
-          {langButtons.map(({ id, label, ocid }) => (
-            <button
-              key={id}
-              type="button"
-              data-ocid={ocid}
-              onClick={() => {
-                if (isPlaying) stopSpeech();
-                setSelectedLang(id);
-              }}
-              aria-pressed={selectedLang === id}
-              className="px-4 py-2 rounded-md text-sm font-semibold transition-all duration-200"
-              style={
-                selectedLang === id
-                  ? {
-                      background: "oklch(var(--gold))",
-                      color: "oklch(0.99 0 0)",
-                      fontFamily: "'Playfair Display', Georgia, serif",
-                      boxShadow: "0 2px 8px oklch(var(--gold) / 0.3)",
-                    }
-                  : {
-                      background: "transparent",
-                      color: "oklch(var(--gold))",
-                      fontFamily: "'Playfair Display', Georgia, serif",
-                    }
-              }
-            >
-              {label}
-            </button>
-          ))}
-        </fieldset>
-
-        {/* Play / Stop button */}
-        <button
-          type="button"
-          data-ocid="audio.play_button"
-          onClick={handlePlay}
-          aria-label={isPlaying ? "Stop audio" : "Play audio"}
-          className="flex items-center gap-2 px-5 py-2.5 rounded-lg font-semibold text-sm transition-all duration-200"
-          style={{
-            background: isPlaying
-              ? "oklch(var(--gold) / 0.15)"
-              : "oklch(var(--gold))",
-            color: isPlaying ? "oklch(var(--gold))" : "oklch(0.99 0 0)",
-            border: isPlaying
-              ? "1.5px solid oklch(var(--gold))"
-              : "1.5px solid transparent",
-            fontFamily: "'Playfair Display', Georgia, serif",
-            boxShadow: isPlaying
-              ? "none"
-              : "0 2px 12px oklch(var(--gold) / 0.35)",
-          }}
-        >
-          {isPlaying ? (
-            <Pause size={16} strokeWidth={2.5} />
-          ) : (
-            <Play size={16} strokeWidth={2.5} />
-          )}
-          <span>{isPlaying ? "Stop" : "Play"}</span>
-        </button>
-
-        {isPlaying && (
-          <span className="text-xs text-gold/70 italic animate-pulse">
-            Playing{" "}
-            {selectedLang === "english"
-              ? "English"
-              : selectedLang === "hindi"
-                ? "Hindi"
-                : "Urdu"}
-            …
-          </span>
-        )}
-      </div>
-    </section>
   );
 }
 
@@ -820,6 +1039,17 @@ export default function App() {
     error: ayatErr,
   } = useGetAyatByIndex(currentIndex, true);
 
+  // Reading progress
+  const {
+    completedSurahs,
+    completedParas,
+    completedCount,
+    totalSurahs,
+    totalParas,
+    toggleSurah,
+    isSurahComplete,
+  } = useReadingProgress();
+
   const totalCount =
     totalAyatReady && totalAyat !== undefined ? totalAyat : null;
 
@@ -926,15 +1156,19 @@ export default function App() {
   const verseDisplay = Number(currentIndex) + 1;
   const totalDisplay = totalCount !== null ? Number(totalCount) : "—";
 
+  // Current surah number for mark button
+  const currentSurahNumber = ayat ? Number(ayat.surahNumber) : null;
+  const isCurrentSurahComplete =
+    currentSurahNumber !== null ? isSurahComplete(currentSurahNumber) : false;
+
   return (
     <div
       data-ocid="app.page"
       className="min-h-screen islamic-bg relative overflow-x-hidden"
     >
-      {/* Festive decorations */}
+      {/* Festive decorations — candles and petals only, no side flowers */}
       <FloatingPetals />
       <CandleDecor />
-      <FlowerBorder />
 
       {/* Push notification prompt (lazy, 3s delay) */}
       <NotificationPrompt />
@@ -989,6 +1223,14 @@ export default function App() {
         </div>
       </header>
 
+      {/* ===== READING PROGRESS BAR — below header, always visible ===== */}
+      <ReadingProgressBar
+        completedCount={completedCount}
+        totalSurahs={totalSurahs}
+        completedParas={completedParas}
+        totalParas={totalParas}
+      />
+
       {/* ===== MAIN CONTENT ===== */}
       <main className="relative z-10 pb-20">
         {isLoading && <AyatSkeleton />}
@@ -1005,11 +1247,98 @@ export default function App() {
 
         {!isLoading && !ayatError && ayat && (
           <div
-            className={`max-w-3xl mx-auto px-4 space-y-10 transition-opacity duration-300 ${isSwitching ? "opacity-50" : "opacity-100"}`}
+            className={`max-w-3xl mx-auto px-4 pt-6 space-y-8 transition-opacity duration-300 ${isSwitching ? "opacity-50" : "opacity-100"}`}
           >
-            {/* ===== ARABIC TEXT SECTION ===== */}
+            {/* ===== 1. JUMP TO FILTER — TOP ===== */}
+            <JumpToFilter onJump={handleJump} isSwitching={isSwitching} />
+
+            {/* ===== 2. PROGRESS PANEL — collapsible ===== */}
+            <ProgressPanel
+              completedSurahs={completedSurahs}
+              completedParas={completedParas}
+              completedCount={completedCount}
+              totalSurahs={totalSurahs}
+              totalParas={totalParas}
+              onToggleSurah={toggleSurah}
+            />
+
+            {/* ===== 3. SURAH BADGE + MARK SURAH BUTTON — above Arabic ===== */}
             <section
-              className="text-center pt-4 fade-in-up fade-in-up-delay-2"
+              data-ocid="ayat.surah_badge"
+              className="flex flex-col items-center gap-3 fade-in-up fade-in-up-delay-2"
+              aria-label="Surah reference"
+            >
+              {/* Surah badge pill */}
+              <div
+                className="inline-flex flex-wrap items-center gap-2 px-5 py-3 rounded-full text-sm font-medium"
+                style={{
+                  background: "oklch(var(--gold) / 0.08)",
+                  border: "1px solid oklch(var(--gold) / 0.4)",
+                  color: "oklch(var(--gold))",
+                  fontFamily: "'Playfair Display', Georgia, serif",
+                  boxShadow: "0 2px 12px oklch(var(--gold) / 0.08)",
+                }}
+              >
+                <IslamicStar size={14} className="text-gold flex-shrink-0" />
+                <span className="font-semibold">{ayat.surahName}</span>
+                <span className="arabic-text text-base" lang="ar" dir="rtl">
+                  ({ayat.surahNameArabic})
+                </span>
+                <span className="text-gold/60 mx-1">•</span>
+                <span>Verse {ayat.ayatNumber.toString()}</span>
+                <span className="text-gold/60 mx-1">•</span>
+                <span>Surah {ayat.surahNumber.toString()}</span>
+                <IslamicStar size={14} className="text-gold flex-shrink-0" />
+              </div>
+
+              {/* Mark Surah Complete / Completed button */}
+              {currentSurahNumber !== null && (
+                <button
+                  type="button"
+                  data-ocid="ayat.mark_surah_button"
+                  onClick={() => toggleSurah(currentSurahNumber)}
+                  aria-pressed={isCurrentSurahComplete}
+                  aria-label={
+                    isCurrentSurahComplete
+                      ? `Unmark ${ayat.surahName} as complete`
+                      : `Mark ${ayat.surahName} as complete`
+                  }
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-semibold transition-all duration-250"
+                  style={
+                    isCurrentSurahComplete
+                      ? {
+                          background: "oklch(var(--gold))",
+                          color: "oklch(0.99 0 0)",
+                          border: "1.5px solid oklch(var(--gold))",
+                          fontFamily: "'Playfair Display', Georgia, serif",
+                          boxShadow: "0 2px 12px oklch(var(--gold) / 0.35)",
+                        }
+                      : {
+                          background: "transparent",
+                          color: "oklch(var(--gold))",
+                          border: "1.5px solid oklch(var(--gold) / 0.5)",
+                          fontFamily: "'Playfair Display', Georgia, serif",
+                        }
+                  }
+                >
+                  {isCurrentSurahComplete ? (
+                    <>
+                      <CheckCircle2 size={15} strokeWidth={2.5} />
+                      <span>✓ Surah Completed</span>
+                    </>
+                  ) : (
+                    <>
+                      <BookOpen size={15} strokeWidth={2} />
+                      <span>Mark Surah Complete</span>
+                    </>
+                  )}
+                </button>
+              )}
+            </section>
+
+            {/* ===== 4. ARABIC TEXT SECTION ===== */}
+            <section
+              className="text-center fade-in-up fade-in-up-delay-2"
               aria-label="Arabic Verse"
             >
               {/* Decorative top ornament */}
@@ -1054,82 +1383,11 @@ export default function App() {
               </div>
             </section>
 
-            {/* ===== SURAH BADGE ===== */}
+            {/* ===== 5. NAVIGATION — directly below Arabic text ===== */}
             <section
-              data-ocid="ayat.surah_badge"
-              className="flex justify-center fade-in-up fade-in-up-delay-3"
-              aria-label="Surah reference"
-            >
-              <div
-                className="inline-flex flex-wrap items-center gap-2 px-5 py-3 rounded-full text-sm font-medium"
-                style={{
-                  background: "oklch(var(--gold) / 0.08)",
-                  border: "1px solid oklch(var(--gold) / 0.4)",
-                  color: "oklch(var(--gold))",
-                  fontFamily: "'Playfair Display', Georgia, serif",
-                  boxShadow: "0 2px 12px oklch(var(--gold) / 0.08)",
-                }}
-              >
-                <IslamicStar size={14} className="text-gold flex-shrink-0" />
-                <span className="font-semibold">{ayat.surahName}</span>
-                <span className="arabic-text text-base" lang="ar" dir="rtl">
-                  ({ayat.surahNameArabic})
-                </span>
-                <span className="text-gold/60 mx-1">•</span>
-                <span>Verse {ayat.ayatNumber.toString()}</span>
-                <span className="text-gold/60 mx-1">•</span>
-                <span>Surah {ayat.surahNumber.toString()}</span>
-                <IslamicStar size={14} className="text-gold flex-shrink-0" />
-              </div>
-            </section>
-
-            {/* ===== GOLD DIVIDER ===== */}
-            <div className="gold-divider fade-in-up fade-in-up-delay-3" />
-
-            {/* ===== AUDIO PLAYER ===== */}
-            <AudioPlayer
-              english={ayat.english}
-              hindi={ayat.hindi}
-              urdu={ayat.urdu}
-            />
-
-            {/* ===== TRANSLATION CARDS ===== */}
-            <section
-              className="grid grid-cols-1 md:grid-cols-3 gap-5 fade-in-up fade-in-up-delay-4"
-              aria-label="Translations"
-            >
-              <TranslationCard
-                label="English"
-                content={ayat.english}
-                ocid="ayat.english_card"
-              />
-              <TranslationCard
-                label="Hindi"
-                labelScript="हिंदी"
-                content={ayat.hindi}
-                textClassName="hindi-text text-2xl leading-loose"
-                ocid="ayat.hindi_card"
-              />
-              <TranslationCard
-                label="Urdu"
-                labelScript="اردو"
-                content={ayat.urdu}
-                isRtl={true}
-                textClassName="urdu-text text-2xl leading-loose"
-                ocid="ayat.urdu_card"
-              />
-            </section>
-
-            {/* ===== JUMP TO FILTER ===== */}
-            <JumpToFilter onJump={handleJump} isSwitching={isSwitching} />
-
-            {/* ===== NAVIGATION ===== */}
-            <section
-              className="fade-in-up fade-in-up-delay-5"
+              className="fade-in-up fade-in-up-delay-3"
               aria-label="Verse navigation"
             >
-              <div className="gold-divider mb-8" />
-
               <div className="flex items-center justify-center gap-4 flex-wrap">
                 {/* Previous button */}
                 <button
@@ -1178,11 +1436,48 @@ export default function App() {
                   <ChevronRight size={16} strokeWidth={2.5} />
                 </button>
               </div>
-
-              <p className="text-center text-xs text-muted-foreground/50 mt-5 tracking-wide">
-                Navigate freely — browse any verse from the Holy Quran
-              </p>
             </section>
+
+            {/* ===== 6. GOLD DIVIDER ===== */}
+            <div className="gold-divider fade-in-up fade-in-up-delay-3" />
+
+            {/* ===== 7. TRANSLATION CARDS — Urdu, Hindi, English ===== */}
+            <section
+              className="grid grid-cols-1 md:grid-cols-3 gap-5 fade-in-up fade-in-up-delay-4"
+              aria-label="Translations"
+            >
+              <TranslationCard
+                label="Urdu"
+                labelScript="اردو"
+                content={ayat.urdu}
+                isRtl={true}
+                textClassName="urdu-text text-2xl leading-loose"
+                ocid="ayat.urdu_card"
+                audioLang="urdu"
+                speechLang="ur-PK"
+              />
+              <TranslationCard
+                label="Hindi"
+                labelScript="हिंदी"
+                content={ayat.hindi}
+                textClassName="hindi-text text-2xl leading-loose"
+                ocid="ayat.hindi_card"
+                audioLang="hindi"
+                speechLang="hi-IN"
+              />
+              <TranslationCard
+                label="English"
+                content={ayat.english}
+                ocid="ayat.english_card"
+                audioLang="english"
+                speechLang="en-US"
+              />
+            </section>
+
+            {/* Bottom navigation hint */}
+            <p className="text-center text-xs text-muted-foreground/50 tracking-wide pb-4">
+              Navigate freely — browse any verse from the Holy Quran
+            </p>
           </div>
         )}
       </main>
