@@ -1594,25 +1594,23 @@ export default function App() {
    * Falls back gracefully if the exact ayah is not in the dataset.
    */
   const handleJump = useCallback((surahNum: number, ayahNum: number) => {
-    const map = indexMapRef.current;
-
-    // Try exact match
-    const exactKey = `${surahNum}-${ayahNum}`;
-    if (map.has(exactKey)) {
-      setCurrentIndex(BigInt(map.get(exactKey)!));
+    // Compute the global 0-based index directly from the known Quran structure.
+    // Sum up all ayahs in surahs before this one, then add (ayahNum - 1).
+    const surahIndex = SURAH_LIST.findIndex((s) => s.surahNumber === surahNum);
+    if (surahIndex === -1) {
+      setCurrentIndex(0n);
       return;
     }
-
-    // Find first available ayah of that surah
-    for (const [key, idx] of map.entries()) {
-      if (key.startsWith(`${surahNum}-`)) {
-        setCurrentIndex(BigInt(idx));
-        return;
-      }
-    }
-
-    // Fallback: jump to first verse
-    setCurrentIndex(0n);
+    const offset = SURAH_LIST.slice(0, surahIndex).reduce(
+      (acc, s) => acc + s.totalAyah,
+      0,
+    );
+    const clampedAyah = Math.max(
+      1,
+      Math.min(ayahNum, SURAH_LIST[surahIndex].totalAyah),
+    );
+    const globalIdx = offset + (clampedAyah - 1);
+    setCurrentIndex(BigInt(globalIdx));
   }, []);
 
   // Stop speech when verse changes
