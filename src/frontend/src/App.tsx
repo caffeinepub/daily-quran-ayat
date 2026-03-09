@@ -13,6 +13,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { JumpToFilter } from "./components/JumpToFilter";
 import { useActor } from "./hooks/useActor";
 import { useGetAyatByIndex, useGetTotalAyat } from "./hooks/useQueries";
+import { LOCAL_AYAT } from "./utils/localAyatData";
 
 // ============================================================
 // Decorative Components
@@ -75,59 +76,6 @@ function GeometricRosette({
 // ============================================================
 // Festive Decorative Components
 // ============================================================
-
-function FairyLightsStrip() {
-  const colors = [
-    "#f59e0b",
-    "#fbbf24",
-    "#f97316",
-    "#ec4899",
-    "#a78bfa",
-    "#34d399",
-    "#60a5fa",
-    "#f59e0b",
-    "#fb923c",
-    "#c084fc",
-    "#f472b6",
-    "#fbbf24",
-    "#4ade80",
-    "#38bdf8",
-    "#f59e0b",
-    "#fb7185",
-    "#a78bfa",
-    "#fbbf24",
-    "#f97316",
-    "#34d399",
-  ];
-  return (
-    <div
-      className="fixed top-0 left-0 right-0 z-50 flex items-start justify-around px-2 pt-1 pointer-events-none"
-      aria-hidden="true"
-    >
-      {/* Wire */}
-      <div className="absolute top-3 left-0 right-0 h-px bg-gray-400/30" />
-      {colors.map((color, i) => (
-        <div key={color + String(i)} className="flex flex-col items-center">
-          {/* Wire connection */}
-          <div
-            className="w-px h-3"
-            style={{ background: "rgba(120,100,60,0.4)" }}
-          />
-          {/* Bulb */}
-          <div
-            className="w-3 h-4 rounded-b-full rounded-t-sm"
-            style={{
-              background: color,
-              boxShadow: `0 0 8px 3px ${color}88, 0 0 16px 5px ${color}44`,
-              animation: `twinkle ${1.5 + ((i * 0.3) % 2)}s ease-in-out infinite`,
-              animationDelay: `${(i * 0.2) % 2}s`,
-            }}
-          />
-        </div>
-      ))}
-    </div>
-  );
-}
 
 function FloatingPetals() {
   const petals = [
@@ -879,30 +827,45 @@ export default function App() {
   const indexMapRef = useRef<Map<string, number>>(new Map());
   const indexMapBuilt = useRef(false);
 
-  // Build the index map once all ayat are available
+  // Build the index map once — first try backend, fall back to local data
   useEffect(() => {
-    if (!totalAyat || !actor || indexMapBuilt.current) return;
-    const total = Number(totalAyat);
-    if (total === 0) return;
+    if (indexMapBuilt.current) return;
+    if (!totalAyat) return;
 
     indexMapBuilt.current = true;
 
-    const promises = Array.from({ length: total }, (_, i) =>
-      actor.getAyatByIndex(BigInt(i)).then((a) => ({ index: i, a })),
-    );
+    if (actor) {
+      const total = Number(totalAyat);
+      const promises = Array.from({ length: total }, (_, i) =>
+        actor.getAyatByIndex(BigInt(i)).then((a) => ({ index: i, a })),
+      );
 
-    Promise.all(promises)
-      .then((results) => {
-        const map = new Map<string, number>();
-        for (const { index, a } of results) {
-          map.set(`${a.surahNumber}-${a.ayatNumber}`, index);
-        }
-        indexMapRef.current = map;
-      })
-      .catch(() => {
-        // If parallel fetch fails, index map stays empty — navigation falls back gracefully
-        indexMapBuilt.current = false;
-      });
+      Promise.all(promises)
+        .then((results) => {
+          const map = new Map<string, number>();
+          for (const { index, a } of results) {
+            map.set(`${Number(a.surahNumber)}-${Number(a.ayatNumber)}`, index);
+          }
+          indexMapRef.current = map;
+        })
+        .catch(() => {
+          // Backend failed — build map from local data
+          indexMapBuilt.current = false;
+          buildLocalIndexMap();
+        });
+    } else {
+      buildLocalIndexMap();
+    }
+
+    function buildLocalIndexMap() {
+      indexMapBuilt.current = true;
+      const map = new Map<string, number>();
+      for (let i = 0; i < LOCAL_AYAT.length; i++) {
+        const a = LOCAL_AYAT[i];
+        map.set(`${Number(a.surahNumber)}-${Number(a.ayatNumber)}`, i);
+      }
+      indexMapRef.current = map;
+    }
   }, [totalAyat, actor]);
 
   // Derived booleans
@@ -969,7 +932,6 @@ export default function App() {
       className="min-h-screen islamic-bg relative overflow-x-hidden"
     >
       {/* Festive decorations */}
-      <FairyLightsStrip />
       <FloatingPetals />
       <CandleDecor />
       <FlowerBorder />
@@ -981,7 +943,7 @@ export default function App() {
       <div className="fixed inset-0 geometric-overlay pointer-events-none" />
 
       {/* ===== HEADER ===== */}
-      <header className="relative z-10 pt-16 pb-6 px-4 text-center">
+      <header className="relative z-10 pt-8 pb-6 px-4 text-center">
         <div className="max-w-3xl mx-auto">
           {/* Bismillah ornament */}
           <div className="ornament mb-5 fade-in-up fade-in-up-delay-1">
