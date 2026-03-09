@@ -1,4 +1,4 @@
-import { BookOpen } from "lucide-react";
+import { BookOpen, ChevronDown, ChevronUp } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { PARA_LIST, SURAH_LIST, getSurahsInPara } from "../utils/quranData";
 
@@ -155,6 +155,7 @@ function FocusableInput({
 // ============================================================
 
 export function JumpToFilter({ onJump, isSwitching }: JumpToFilterProps) {
+  const [expanded, setExpanded] = useState(false);
   const [selectedPara, setSelectedPara] = useState<string>("");
   const [selectedSurah, setSelectedSurah] = useState<string>("");
   const [ayahInput, setAyahInput] = useState<string>("");
@@ -237,18 +238,26 @@ export function JumpToFilter({ onJump, isSwitching }: JumpToFilterProps) {
 
   return (
     <section
-      className="card-islamic rounded-xl p-5 fade-in-up fade-in-up-delay-3"
+      data-ocid="filter.panel"
+      className="card-islamic rounded-xl fade-in-up fade-in-up-delay-3"
       aria-label="Jump to verse filter"
     >
-      {/* Header row */}
-      <div className="flex items-center gap-2 pb-3 mb-4 border-b border-gold/20">
+      {/* Collapsible header — always visible, acts as toggle */}
+      <button
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
+        className="w-full flex items-center gap-3 px-5 py-3"
+        aria-expanded={expanded}
+        aria-controls="jump-filter-body"
+        style={{ background: "none", border: "none", cursor: "pointer" }}
+      >
         <BookOpen
-          size={13}
+          size={14}
           style={{ color: "oklch(var(--gold))", flexShrink: 0 }}
           aria-hidden="true"
         />
         <span
-          className="text-xs font-semibold uppercase tracking-widest"
+          className="text-xs font-semibold uppercase tracking-widest flex-1 text-left"
           style={{
             color: "oklch(var(--gold))",
             fontFamily: "'Playfair Display', Georgia, serif",
@@ -257,7 +266,7 @@ export function JumpToFilter({ onJump, isSwitching }: JumpToFilterProps) {
           Jump to Verse
         </span>
         <span
-          className="ml-auto text-xs opacity-50"
+          className="text-xs opacity-50 mr-2"
           style={{
             color: "oklch(var(--gold))",
             fontFamily: "'Playfair Display', Georgia, serif",
@@ -266,158 +275,185 @@ export function JumpToFilter({ onJump, isSwitching }: JumpToFilterProps) {
         >
           30 Para · 114 Surah · 6236 Ayah
         </span>
-      </div>
-
-      {/* Filter controls row */}
-      <div className="grid grid-cols-1 sm:grid-cols-[1fr_1.5fr_0.8fr_auto] gap-3 items-end">
-        {/* Para (Juz) selector */}
-        <div className="flex flex-col gap-1.5">
-          <label
-            htmlFor="jump-para-select"
-            className="text-xs font-medium opacity-60"
-            style={{
-              color: "oklch(var(--foreground))",
-              fontFamily: "'Playfair Display', Georgia, serif",
-            }}
-          >
-            Para (Juz)
-          </label>
-          <FocusableSelect
-            id="jump-para-select"
-            aria-label="Select Para (Juz)"
-            data-ocid="filter.para_select"
-            value={selectedPara}
-            onChange={handleParaChange}
-            disabled={isSwitching}
-          >
-            <option value="">All Paras</option>
-            {PARA_LIST.map((para) => (
-              <option key={para.paraNumber} value={String(para.paraNumber)}>
-                Para {para.paraNumber} — {para.name}
-              </option>
-            ))}
-          </FocusableSelect>
-        </div>
-
-        {/* Surah selector */}
-        <div className="flex flex-col gap-1.5">
-          <label
-            htmlFor="jump-surah-select"
-            className="text-xs font-medium opacity-60"
-            style={{
-              color: "oklch(var(--foreground))",
-              fontFamily: "'Playfair Display', Georgia, serif",
-            }}
-          >
-            Surah
-          </label>
-          <FocusableSelect
-            id="jump-surah-select"
-            aria-label="Select Surah"
-            data-ocid="filter.surah_select"
-            value={selectedSurah}
-            onChange={handleSurahChange}
-            disabled={isSwitching}
-          >
-            <option value="">Select Surah</option>
-            {visibleSurahs.map((surah) => (
-              <option key={surah.surahNumber} value={String(surah.surahNumber)}>
-                {surah.surahNumber}. {surah.name} ({surah.arabicName})
-              </option>
-            ))}
-          </FocusableSelect>
-        </div>
-
-        {/* Ayah number input */}
-        <div className="flex flex-col gap-1.5">
-          <label
-            htmlFor="jump-ayah-input"
-            className="text-xs font-medium opacity-60"
-            style={{
-              color: "oklch(var(--foreground))",
-              fontFamily: "'Playfair Display', Georgia, serif",
-            }}
-          >
-            Ayah
-          </label>
-          <FocusableInput
-            id="jump-ayah-input"
-            aria-label={`Ayah number (1–${selectedSurahInfo ? selectedSurahInfo.totalAyah : maxAyah})`}
-            data-ocid="filter.ayah_input"
-            value={ayahInput}
-            onChange={setAyahInput}
-            min={1}
-            max={maxAyah}
-            placeholder={`1 – ${selectedSurahInfo ? selectedSurahInfo.totalAyah : "…"}`}
-            disabled={!selectedSurah || isSwitching}
-            onKeyDown={handleKeyDown}
+        {expanded ? (
+          <ChevronUp
+            size={16}
+            style={{ color: "oklch(var(--gold))", flexShrink: 0 }}
           />
-        </div>
+        ) : (
+          <ChevronDown
+            size={16}
+            style={{ color: "oklch(var(--gold))", flexShrink: 0 }}
+          />
+        )}
+      </button>
 
-        {/* Go button */}
-        <div className="flex flex-col gap-1.5">
-          <span className="text-xs opacity-0 select-none" aria-hidden="true">
-            Go
-          </span>
-          <button
-            type="button"
-            data-ocid="filter.go_button"
-            onClick={handleGo}
-            disabled={!selectedSurah || isSwitching}
-            aria-label="Jump to selected verse"
-            style={{
-              background:
-                selectedSurah && !isSwitching
-                  ? "oklch(var(--gold))"
-                  : "oklch(var(--gold) / 0.3)",
-              color: "oklch(0.99 0 0)",
-              border: "none",
-              borderRadius: "0.375rem",
-              padding: "0.55rem 1.25rem",
-              fontFamily: "'Playfair Display', Georgia, serif",
-              fontSize: "0.8125rem",
-              fontWeight: 700,
-              letterSpacing: "0.04em",
-              cursor: selectedSurah && !isSwitching ? "pointer" : "not-allowed",
-              transition: "background 0.2s, box-shadow 0.2s",
-              boxShadow:
-                selectedSurah && !isSwitching
-                  ? "0 2px 12px oklch(var(--gold) / 0.3)"
-                  : "none",
-              whiteSpace: "nowrap",
-            }}
-            onMouseEnter={(e) => {
-              if (selectedSurah && !isSwitching) {
-                (e.currentTarget as HTMLButtonElement).style.boxShadow =
-                  "0 4px 18px oklch(var(--gold) / 0.45)";
-              }
-            }}
-            onMouseLeave={(e) => {
-              if (selectedSurah && !isSwitching) {
-                (e.currentTarget as HTMLButtonElement).style.boxShadow =
-                  "0 2px 12px oklch(var(--gold) / 0.3)";
-              }
-            }}
-          >
-            Go ✦
-          </button>
-        </div>
-      </div>
-
-      {/* Subtle helper hint */}
-      {selectedSurahInfo && (
-        <p
-          className="mt-3 text-xs opacity-50 tracking-wide"
-          style={{
-            color: "oklch(var(--foreground))",
-            fontFamily: "'Playfair Display', Georgia, serif",
-          }}
-          aria-live="polite"
+      {/* Collapsible body */}
+      {expanded && (
+        <div
+          id="jump-filter-body"
+          className="px-5 pb-5 border-t"
+          style={{ borderColor: "oklch(var(--gold) / 0.15)" }}
         >
-          {selectedSurahInfo.name} ({selectedSurahInfo.arabicName}) —{" "}
-          {selectedSurahInfo.totalAyah} ayahs · Para{" "}
-          {selectedSurahInfo.paraNumber}
-        </p>
+          {/* Filter controls row */}
+          <div className="grid grid-cols-1 sm:grid-cols-[1fr_1.5fr_0.8fr_auto] gap-3 items-end mt-4">
+            {/* Para (Juz) selector */}
+            <div className="flex flex-col gap-1.5">
+              <label
+                htmlFor="jump-para-select"
+                className="text-xs font-medium opacity-60"
+                style={{
+                  color: "oklch(var(--foreground))",
+                  fontFamily: "'Playfair Display', Georgia, serif",
+                }}
+              >
+                Para (Juz)
+              </label>
+              <FocusableSelect
+                id="jump-para-select"
+                aria-label="Select Para (Juz)"
+                data-ocid="filter.para_select"
+                value={selectedPara}
+                onChange={handleParaChange}
+                disabled={isSwitching}
+              >
+                <option value="">All Paras</option>
+                {PARA_LIST.map((para) => (
+                  <option key={para.paraNumber} value={String(para.paraNumber)}>
+                    Para {para.paraNumber} — {para.name}
+                  </option>
+                ))}
+              </FocusableSelect>
+            </div>
+
+            {/* Surah selector */}
+            <div className="flex flex-col gap-1.5">
+              <label
+                htmlFor="jump-surah-select"
+                className="text-xs font-medium opacity-60"
+                style={{
+                  color: "oklch(var(--foreground))",
+                  fontFamily: "'Playfair Display', Georgia, serif",
+                }}
+              >
+                Surah
+              </label>
+              <FocusableSelect
+                id="jump-surah-select"
+                aria-label="Select Surah"
+                data-ocid="filter.surah_select"
+                value={selectedSurah}
+                onChange={handleSurahChange}
+                disabled={isSwitching}
+              >
+                <option value="">Select Surah</option>
+                {visibleSurahs.map((surah) => (
+                  <option
+                    key={surah.surahNumber}
+                    value={String(surah.surahNumber)}
+                  >
+                    {surah.surahNumber}. {surah.name} ({surah.arabicName})
+                  </option>
+                ))}
+              </FocusableSelect>
+            </div>
+
+            {/* Ayah number input */}
+            <div className="flex flex-col gap-1.5">
+              <label
+                htmlFor="jump-ayah-input"
+                className="text-xs font-medium opacity-60"
+                style={{
+                  color: "oklch(var(--foreground))",
+                  fontFamily: "'Playfair Display', Georgia, serif",
+                }}
+              >
+                Ayah
+              </label>
+              <FocusableInput
+                id="jump-ayah-input"
+                aria-label={`Ayah number (1–${selectedSurahInfo ? selectedSurahInfo.totalAyah : maxAyah})`}
+                data-ocid="filter.ayah_input"
+                value={ayahInput}
+                onChange={setAyahInput}
+                min={1}
+                max={maxAyah}
+                placeholder={`1 – ${selectedSurahInfo ? selectedSurahInfo.totalAyah : "…"}`}
+                disabled={!selectedSurah || isSwitching}
+                onKeyDown={handleKeyDown}
+              />
+            </div>
+
+            {/* Go button */}
+            <div className="flex flex-col gap-1.5">
+              <span
+                className="text-xs opacity-0 select-none"
+                aria-hidden="true"
+              >
+                Go
+              </span>
+              <button
+                type="button"
+                data-ocid="filter.go_button"
+                onClick={handleGo}
+                disabled={!selectedSurah || isSwitching}
+                aria-label="Jump to selected verse"
+                style={{
+                  background:
+                    selectedSurah && !isSwitching
+                      ? "oklch(var(--gold))"
+                      : "oklch(var(--gold) / 0.3)",
+                  color: "oklch(0.99 0 0)",
+                  border: "none",
+                  borderRadius: "0.375rem",
+                  padding: "0.55rem 1.25rem",
+                  fontFamily: "'Playfair Display', Georgia, serif",
+                  fontSize: "0.8125rem",
+                  fontWeight: 700,
+                  letterSpacing: "0.04em",
+                  cursor:
+                    selectedSurah && !isSwitching ? "pointer" : "not-allowed",
+                  transition: "background 0.2s, box-shadow 0.2s",
+                  boxShadow:
+                    selectedSurah && !isSwitching
+                      ? "0 2px 12px oklch(var(--gold) / 0.3)"
+                      : "none",
+                  whiteSpace: "nowrap",
+                }}
+                onMouseEnter={(e) => {
+                  if (selectedSurah && !isSwitching) {
+                    (e.currentTarget as HTMLButtonElement).style.boxShadow =
+                      "0 4px 18px oklch(var(--gold) / 0.45)";
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (selectedSurah && !isSwitching) {
+                    (e.currentTarget as HTMLButtonElement).style.boxShadow =
+                      "0 2px 12px oklch(var(--gold) / 0.3)";
+                  }
+                }}
+              >
+                Go ✦
+              </button>
+            </div>
+          </div>
+
+          {/* Subtle helper hint */}
+          {selectedSurahInfo && (
+            <p
+              className="mt-3 text-xs opacity-50 tracking-wide"
+              style={{
+                color: "oklch(var(--foreground))",
+                fontFamily: "'Playfair Display', Georgia, serif",
+              }}
+              aria-live="polite"
+            >
+              {selectedSurahInfo.name} ({selectedSurahInfo.arabicName}) —{" "}
+              {selectedSurahInfo.totalAyah} ayahs · Para{" "}
+              {selectedSurahInfo.paraNumber}
+            </p>
+          )}
+        </div>
       )}
     </section>
   );

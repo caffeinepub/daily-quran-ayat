@@ -44,7 +44,7 @@ export const LOCAL_AYAT: LocalAyat[] = [
     ayatNumber: 3n,
     arabic: "الرَّحْمَٰنِ الرَّحِيمِ",
     english: "The Entirely Merciful, the Especially Merciful",
-    hindi: "वह परिपूर्ण दयावान है, अत्यन्त दयालु।",
+    hindi: "वह अत्यंत दयालु और कृपालु है।",
     urdu: "بلکل مہربان, رحم والا ہے۔",
   },
   {

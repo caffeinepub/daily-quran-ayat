@@ -1,40 +1,30 @@
 # Daily Quran Ayat
 
 ## Current State
-- App shows Quran ayat one at a time with Previous/Next navigation
-- Backend has ~35 sample ayat with surahNumber, surahName, surahNameArabic, ayatNumber, arabic, english, hindi, urdu fields
-- No para/juz field in the data model
-- Navigation is purely sequential (index-based)
-- Audio playback (TTS) with language selection (English/Hindi/Urdu)
-- Push notification prompt
-- Festive decorations (fairy lights, petals, candles)
-- Premium white/black/gold design with Playfair Display font
+- Full Quran app with Arabic text, Urdu, Hindi, English translations
+- Reading progress tracked per Surah and Para via localStorage
+- Navigation: Previous/Next buttons + Jump to Filter
+- Audio playback per language card
+- Hindi field currently shows Urdu-script text on some verses (no actual Devanagari Hindi translation)
+- Reading progress allows marking Surahs complete; Para 2 & 5 are marked in the user's saved state
+- No share/export feature
 
 ## Requested Changes (Diff)
 
 ### Add
-- **Para (Juz) filter**: Dropdown with all 30 Para names/numbers. On selection, navigates to the first ayat of that Para using a frontend-side Para→Surah mapping table.
-- **Surah filter**: Dropdown with all 114 Surah names (number + English name). On selection, navigates to the first available ayat of that Surah in the dataset (by finding the lowest index where surahNumber matches).
-- **Ayah number filter**: Numeric input or dropdown (1 to max ayah of selected surah). On selection, navigates to the matching ayat in the dataset (surahNumber + ayatNumber match).
-- A compact "Jump To" panel above the navigation section, styled in the existing gold/card aesthetic.
-- data-ocid markers on all new filter controls.
+- **Share as HD Image** button below the translations (or near the Mark Surah Complete button): When clicked, generates a high-resolution canvas image containing the Arabic verse, Urdu translation, Hindi translation, and English translation, then triggers a browser share (Web Share API) or download if share is unsupported. Image should be visually styled (Islamic theme, gold accents, dark background) and render at 1200x1600px (portrait) for HD sharing.
+- **Reset Progress button** inside the Reading Progress collapsible panel so the user can clear all marks (removes Para 2 & 5 marks and any other saved progress).
 
 ### Modify
-- Navigation section: add the new filter panel above the Previous/Next buttons.
-- The three filters are independent but aware: selecting a Para auto-fills the Surah dropdown to the first surah of that Para; selecting a Surah clears the Ayah input.
+- **Hindi translation**: The `hindi` field in `localAyatData.ts` must contain proper Devanagari Hindi text, not Urdu. Audit every entry in `localAyatData.ts` and replace any Urdu-script entries in the `hindi` field with correct Devanagari translations. Also update `useReadingProgress.ts` to expose a `resetProgress` function.
 
 ### Remove
 - Nothing removed.
 
 ## Implementation Plan
-1. Create a `quranData.ts` utility file in `src/utils/` with:
-   - Para/Juz data: array of 30 entries with { paraNumber, name (e.g. "Alif Lam Meem"), startSurah, startAyah }
-   - Surah data: array of 114 entries with { surahNumber, name, arabicName, totalAyah }
-2. Add a `JumpToFilter` component in App.tsx:
-   - Para dropdown (1–30)
-   - Surah dropdown (1–114, filtered by para selection or all)
-   - Ayah input (1–totalAyah for selected surah)
-   - "Go" button that calls a handler to find and jump to the matching index
-3. Add `findAyatIndex(surahNum, ayahNum)` helper that searches the loaded ayat dataset for the closest match. Since the backend has limited data, fall back to the nearest available surah.
-4. Wire the filter state to `currentIndex` via the existing `setCurrentIndex`.
-5. Add `data-ocid` markers: `filter.para_select`, `filter.surah_select`, `filter.ayah_input`, `filter.go_button`.
+1. Add `resetProgress` function to `useReadingProgress.ts` that clears localStorage and resets state.
+2. Add Reset Progress button inside the collapsible body of `ReadingProgressSection` in `App.tsx`.
+3. Audit all `hindi` fields in `localAyatData.ts` — ensure every entry uses proper Devanagari Hindi script. Fix any that contain Urdu script.
+4. Create `ShareVerseButton` component in `App.tsx` that uses `html2canvas` or a custom canvas draw function to render Arabic text + 3 translations as an HD 1200x1600 image and triggers download/share.
+5. Place the Share button below the translations section, alongside the Mark Surah Complete button.
+6. Validate and deploy.

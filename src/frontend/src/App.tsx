@@ -17,6 +17,8 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronUp,
+  RotateCcw,
+  Share2,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { JumpToFilter } from "./components/JumpToFilter";
@@ -25,6 +27,7 @@ import { useGetAyatByIndex, useGetTotalAyat } from "./hooks/useQueries";
 import { useReadingProgress } from "./hooks/useReadingProgress";
 import { LOCAL_AYAT } from "./utils/localAyatData";
 import { PARA_LIST, SURAH_LIST } from "./utils/quranData";
+import { applyBestVoice } from "./utils/voiceUtils";
 
 // ============================================================
 // Decorative Components
@@ -381,6 +384,7 @@ interface ReadingProgressSectionProps {
   totalSurahs: number;
   totalParas: number;
   onToggleSurah: (surahNumber: number) => void;
+  onResetProgress: () => void;
 }
 
 function ReadingProgressSection({
@@ -390,6 +394,7 @@ function ReadingProgressSection({
   totalSurahs,
   totalParas,
   onToggleSurah,
+  onResetProgress,
 }: ReadingProgressSectionProps) {
   const [expanded, setExpanded] = useState(false);
   const pct = Math.round((completedCount / totalSurahs) * 100);
@@ -645,9 +650,155 @@ function ReadingProgressSection({
               })}
             </div>
           </div>
+
+          {/* Reset All Progress */}
+          <div
+            className="flex justify-center pt-2 border-t"
+            style={{ borderColor: "oklch(var(--gold) / 0.12)" }}
+          >
+            <button
+              type="button"
+              data-ocid="progress.reset_button"
+              onClick={() => {
+                if (
+                  window.confirm(
+                    "Reset all reading progress? This cannot be undone.",
+                  )
+                ) {
+                  onResetProgress();
+                }
+              }}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-xs font-semibold transition-all duration-200 mt-2"
+              style={{
+                background: "transparent",
+                color: "oklch(0.55 0.18 25)",
+                border: "1.5px solid oklch(var(--gold) / 0.35)",
+                fontFamily: "'Playfair Display', Georgia, serif",
+              }}
+            >
+              <RotateCcw size={12} strokeWidth={2.5} />
+              <span>Reset All Progress</span>
+            </button>
+          </div>
         </div>
       )}
     </section>
+  );
+}
+
+// ============================================================
+// Arabic Text Card (with inline audio button)
+// ============================================================
+
+function ArabicCard({ text }: { text: string }) {
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
+
+  // Stop when unmounted
+  useEffect(() => {
+    return () => {
+      if (utteranceRef.current) window.speechSynthesis.cancel();
+    };
+  }, []);
+
+  const handleAudio = useCallback(() => {
+    if (isPlaying) {
+      window.speechSynthesis.cancel();
+      setIsPlaying(false);
+      utteranceRef.current = null;
+      return;
+    }
+    const utterance = new SpeechSynthesisUtterance(text);
+    const doSpeak = () => {
+      applyBestVoice(utterance, "ar-SA");
+      utterance.onstart = () => {
+        setIsLoading(false);
+        setIsPlaying(true);
+      };
+      utterance.onend = () => {
+        setIsPlaying(false);
+        utteranceRef.current = null;
+      };
+      utterance.onerror = () => {
+        setIsPlaying(false);
+        setIsLoading(false);
+        utteranceRef.current = null;
+      };
+      utteranceRef.current = utterance;
+      window.speechSynthesis.speak(utterance);
+    };
+    setIsLoading(true);
+    const voices = window.speechSynthesis.getVoices();
+    if (voices.length > 0) {
+      doSpeak();
+    } else {
+      window.speechSynthesis.onvoiceschanged = () => {
+        window.speechSynthesis.onvoiceschanged = null;
+        doSpeak();
+      };
+    }
+  }, [isPlaying, text]);
+
+  return (
+    <div
+      data-ocid="ayat.arabic_text"
+      className="card-islamic rounded-2xl px-6 py-10 mb-6 relative"
+      style={{
+        background:
+          "linear-gradient(135deg, oklch(var(--card)), oklch(var(--parchment)))",
+      }}
+    >
+      {/* Arabic speaker button — top-right corner */}
+      <button
+        type="button"
+        data-ocid="audio.arabic_play_button"
+        onClick={handleAudio}
+        aria-label={
+          isPlaying ? "Stop Arabic audio" : "Listen to Arabic recitation"
+        }
+        title={isPlaying ? "Stop Arabic" : "Listen in Arabic"}
+        className="absolute top-4 right-4 flex items-center justify-center rounded-full transition-all duration-200"
+        style={{
+          width: "34px",
+          height: "34px",
+          background: isPlaying
+            ? "oklch(var(--gold) / 0.22)"
+            : "oklch(var(--gold) / 0.1)",
+          border: `1.5px solid oklch(var(--gold) / ${isPlaying ? "0.75" : "0.35"})`,
+          color: "oklch(var(--gold))",
+          fontSize: "1.1rem",
+          flexShrink: 0,
+          animation: isPlaying
+            ? "candle-glow-pulse 1.5s ease-in-out infinite"
+            : "none",
+        }}
+      >
+        🗣️
+      </button>
+      {/* Loading indicator */}
+      {isLoading && !isPlaying && (
+        <span
+          className="absolute top-4 right-12 text-xs"
+          style={{
+            color: "oklch(var(--gold) / 0.7)",
+            fontFamily: "'Playfair Display', Georgia, serif",
+            animation: "shimmer 1.5s infinite",
+          }}
+          aria-live="polite"
+        >
+          Loading…
+        </span>
+      )}
+      <p
+        className="arabic-text arabic-glow text-foreground"
+        lang="ar"
+        dir="rtl"
+        style={{ fontSize: "clamp(1.8rem, 5vw, 3rem)" }}
+      >
+        {text}
+      </p>
+    </div>
   );
 }
 
@@ -746,6 +897,7 @@ function TranslationCard({
   speechLang,
 }: TranslationCardProps) {
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
 
   // Stop when unmounted
@@ -765,20 +917,35 @@ function TranslationCard({
       return;
     }
     const utterance = new SpeechSynthesisUtterance(content);
-    utterance.lang = speechLang;
-    utterance.rate = 0.9;
-    utterance.pitch = 1.0;
-    utterance.onstart = () => setIsPlaying(true);
-    utterance.onend = () => {
-      setIsPlaying(false);
-      utteranceRef.current = null;
+    // Voices may load asynchronously — wait for them if needed
+    const doSpeak = () => {
+      applyBestVoice(utterance, speechLang);
+      utterance.onstart = () => {
+        setIsLoading(false);
+        setIsPlaying(true);
+      };
+      utterance.onend = () => {
+        setIsPlaying(false);
+        utteranceRef.current = null;
+      };
+      utterance.onerror = () => {
+        setIsPlaying(false);
+        setIsLoading(false);
+        utteranceRef.current = null;
+      };
+      utteranceRef.current = utterance;
+      window.speechSynthesis.speak(utterance);
     };
-    utterance.onerror = () => {
-      setIsPlaying(false);
-      utteranceRef.current = null;
-    };
-    utteranceRef.current = utterance;
-    window.speechSynthesis.speak(utterance);
+    setIsLoading(true);
+    const voices = window.speechSynthesis.getVoices();
+    if (voices.length > 0) {
+      doSpeak();
+    } else {
+      window.speechSynthesis.onvoiceschanged = () => {
+        window.speechSynthesis.onvoiceschanged = null;
+        doSpeak();
+      };
+    }
   }, [isPlaying, content, speechLang]);
 
   return (
@@ -796,6 +963,20 @@ function TranslationCard({
             {labelScript}
           </span>
         )}
+        {/* Loading label */}
+        {isLoading && !isPlaying && (
+          <span
+            className="ml-auto text-xs mr-1"
+            style={{
+              color: "oklch(var(--gold) / 0.7)",
+              fontFamily: "'Playfair Display', Georgia, serif",
+              animation: "shimmer 1.5s infinite",
+            }}
+            aria-live="polite"
+          >
+            Loading…
+          </span>
+        )}
         {/* Audio button */}
         <button
           type="button"
@@ -803,7 +984,7 @@ function TranslationCard({
           onClick={handleAudio}
           aria-label={isPlaying ? `Stop ${label} audio` : `Listen in ${label}`}
           title={isPlaying ? `Stop ${label}` : `Listen in ${label}`}
-          className="ml-auto flex items-center justify-center rounded-full transition-all duration-200"
+          className={`${isLoading && !isPlaying ? "" : "ml-auto"} flex items-center justify-center rounded-full transition-all duration-200`}
           style={{
             width: "28px",
             height: "28px",
@@ -830,6 +1011,361 @@ function TranslationCard({
         {content}
       </p>
     </div>
+  );
+}
+
+// ============================================================
+// Share Verse as HD Image
+// ============================================================
+
+interface ShareVerseButtonProps {
+  arabic: string;
+  urdu: string;
+  hindi: string;
+  english: string;
+  surahName: string;
+  surahNameArabic: string;
+  ayatNumber: bigint;
+  surahNumber: bigint;
+}
+
+function wrapText(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  x: number,
+  y: number,
+  maxWidth: number,
+  lineHeight: number,
+): number {
+  const words = text.split(" ");
+  let line = "";
+  let currentY = y;
+  for (let i = 0; i < words.length; i++) {
+    const testLine = `${line}${words[i]} `;
+    const metrics = ctx.measureText(testLine);
+    if (metrics.width > maxWidth && i > 0) {
+      ctx.fillText(line.trim(), x, currentY);
+      line = `${words[i]} `;
+      currentY += lineHeight;
+    } else {
+      line = testLine;
+    }
+  }
+  if (line.trim()) {
+    ctx.fillText(line.trim(), x, currentY);
+    currentY += lineHeight;
+  }
+  return currentY;
+}
+
+function ShareVerseButton({
+  arabic,
+  urdu,
+  hindi,
+  english,
+  surahName,
+  surahNameArabic,
+  ayatNumber,
+  surahNumber,
+}: ShareVerseButtonProps) {
+  const [isGenerating, setIsGenerating] = useState(false);
+
+  const handleShare = useCallback(async () => {
+    setIsGenerating(true);
+    try {
+      const W = 1200;
+      const H = 1700;
+      const canvas = document.createElement("canvas");
+      canvas.width = W;
+      canvas.height = H;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+
+      // ── Background ──────────────────────────────────────────────────────
+      const bgGrad = ctx.createLinearGradient(0, 0, W, H);
+      bgGrad.addColorStop(0, "#0d0d1a");
+      bgGrad.addColorStop(0.5, "#111122");
+      bgGrad.addColorStop(1, "#0a0a14");
+      ctx.fillStyle = bgGrad;
+      ctx.fillRect(0, 0, W, H);
+
+      // ── Subtle radial glow ───────────────────────────────────────────────
+      const glow = ctx.createRadialGradient(
+        W / 2,
+        H * 0.35,
+        50,
+        W / 2,
+        H * 0.35,
+        700,
+      );
+      glow.addColorStop(0, "rgba(201,162,39,0.07)");
+      glow.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = glow;
+      ctx.fillRect(0, 0, W, H);
+
+      // ── Outer double border ──────────────────────────────────────────────
+      ctx.strokeStyle = "#c9a227";
+      ctx.lineWidth = 5;
+      ctx.strokeRect(28, 28, W - 56, H - 56);
+      ctx.strokeStyle = "rgba(201,162,39,0.35)";
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(18, 18, W - 36, H - 36);
+      ctx.strokeRect(38, 38, W - 76, H - 76);
+
+      // ── Corner ornaments ─────────────────────────────────────────────────
+      const cornerSize = 40;
+      const corners = [
+        [48, 48],
+        [W - 48, 48],
+        [48, H - 48],
+        [W - 48, H - 48],
+      ] as [number, number][];
+      ctx.fillStyle = "#c9a227";
+      for (const [cx, cy] of corners) {
+        // Draw small star-like diamond
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.beginPath();
+        for (let k = 0; k < 8; k++) {
+          const angle = (k * Math.PI) / 4;
+          const r = k % 2 === 0 ? cornerSize * 0.4 : cornerSize * 0.18;
+          const px = Math.cos(angle) * r;
+          const py = Math.sin(angle) * r;
+          k === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+        }
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+      }
+
+      // ── App Title ────────────────────────────────────────────────────────
+      ctx.textAlign = "center";
+      ctx.direction = "ltr";
+      ctx.fillStyle = "#c9a227";
+      ctx.font = "bold 36px Georgia, serif";
+      ctx.fillText("Daily Quran Ayat", W / 2, 100);
+
+      // ── Ornament ✦ ✦ ✦ ─────────────────────────────────────────────────
+      ctx.font = "22px Georgia, serif";
+      ctx.fillStyle = "rgba(201,162,39,0.7)";
+      ctx.fillText("✦  ✦  ✦", W / 2, 138);
+
+      // ── Gold rule ────────────────────────────────────────────────────────
+      const drawRule = (y: number, alpha = 0.5) => {
+        ctx.beginPath();
+        ctx.moveTo(80, y);
+        ctx.lineTo(W - 80, y);
+        ctx.strokeStyle = `rgba(201,162,39,${alpha})`;
+        ctx.lineWidth = 1.2;
+        ctx.stroke();
+      };
+      drawRule(160);
+
+      // ── Surah badge ──────────────────────────────────────────────────────
+      ctx.font = "bold 28px Georgia, serif";
+      ctx.fillStyle = "#e8c96a";
+      ctx.fillText(
+        `${surahName}  (${surahNameArabic})  •  Verse ${ayatNumber.toString()}  •  Surah ${surahNumber.toString()}`,
+        W / 2,
+        200,
+      );
+
+      drawRule(228);
+
+      // ── Arabic text ──────────────────────────────────────────────────────
+      ctx.direction = "rtl";
+      ctx.textAlign = "center";
+      ctx.font = "bold 56px Arial, sans-serif";
+      ctx.fillStyle = "#ffffff";
+      // Wrap Arabic text
+      const arabicMaxWidth = W - 180;
+      const arabicWords = arabic.split(" ");
+      let arabicLine = "";
+      let arabicY = 310;
+      const arabicLineH = 78;
+      for (let i = 0; i < arabicWords.length; i++) {
+        const testLine = `${arabicLine}${arabicWords[i]} `;
+        if (ctx.measureText(testLine).width > arabicMaxWidth && i > 0) {
+          ctx.fillText(arabicLine.trim(), W / 2, arabicY);
+          arabicLine = `${arabicWords[i]} `;
+          arabicY += arabicLineH;
+        } else {
+          arabicLine = testLine;
+        }
+      }
+      if (arabicLine.trim()) {
+        ctx.fillText(arabicLine.trim(), W / 2, arabicY);
+        arabicY += arabicLineH;
+      }
+
+      // ── Decorative separator ─────────────────────────────────────────────
+      let curY = arabicY + 30;
+      ctx.direction = "ltr";
+      ctx.textAlign = "center";
+      ctx.fillStyle = "rgba(201,162,39,0.65)";
+      ctx.font = "20px Georgia, serif";
+      ctx.fillText("─── ✦ ───", W / 2, curY);
+      curY += 50;
+
+      // ── Translation blocks ───────────────────────────────────────────────
+      const leftPad = 90;
+      const rightPad = 90;
+      const textMaxW = W - leftPad - rightPad;
+      const sectionLabelFont = "bold 22px Georgia, serif";
+      const transLineH = 38;
+      const labelH = 46;
+
+      // URDU (RTL)
+      ctx.direction = "rtl";
+      ctx.textAlign = "right";
+      ctx.font = sectionLabelFont;
+      ctx.fillStyle = "#c9a227";
+      ctx.fillText("✦  URDU  اردو", W - rightPad, curY);
+      curY += labelH;
+      ctx.font = "32px Arial, sans-serif";
+      ctx.fillStyle = "#f0e8d0";
+      curY = wrapText(ctx, urdu, W - rightPad, curY, textMaxW, transLineH);
+      curY += 28;
+      drawRule(curY, 0.2);
+      curY += 38;
+
+      // HINDI (LTR)
+      ctx.direction = "ltr";
+      ctx.textAlign = "left";
+      ctx.font = sectionLabelFont;
+      ctx.fillStyle = "#c9a227";
+      ctx.fillText("✦  HINDI  हिंदी", leftPad, curY);
+      curY += labelH;
+      ctx.font = "30px Arial, sans-serif";
+      ctx.fillStyle = "#f0e8d0";
+      curY = wrapText(ctx, hindi, leftPad, curY, textMaxW, transLineH);
+      curY += 28;
+      drawRule(curY, 0.2);
+      curY += 38;
+
+      // ENGLISH (LTR)
+      ctx.direction = "ltr";
+      ctx.textAlign = "left";
+      ctx.font = sectionLabelFont;
+      ctx.fillStyle = "#c9a227";
+      ctx.fillText("✦  ENGLISH", leftPad, curY);
+      curY += labelH;
+      ctx.font = "italic 28px Georgia, serif";
+      ctx.fillStyle = "#d8d0c8";
+      curY = wrapText(ctx, english, leftPad, curY, textMaxW, transLineH);
+      curY += 20;
+
+      // ── Bottom ornament ───────────────────────────────────────────────────
+      drawRule(H - 100, 0.4);
+      ctx.direction = "ltr";
+      ctx.textAlign = "center";
+      ctx.font = "16px Georgia, serif";
+      ctx.fillStyle = "rgba(201,162,39,0.55)";
+      ctx.fillText("© Daily Quran Ayat", W / 2, H - 65);
+      ctx.font = "14px Georgia, serif";
+      ctx.fillStyle = "rgba(201,162,39,0.35)";
+      ctx.fillText("✦  ✦  ✦", W / 2, H - 42);
+
+      // ── Export ────────────────────────────────────────────────────────────
+      const filename = `quran-${surahName}-verse-${ayatNumber.toString()}.png`;
+
+      canvas.toBlob(
+        async (blob) => {
+          if (!blob) return;
+          const file = new File([blob], filename, { type: "image/png" });
+          let shared = false;
+
+          // Try Web Share API (mobile-first)
+          if (
+            typeof navigator.share === "function" &&
+            typeof navigator.canShare === "function" &&
+            navigator.canShare({ files: [file] })
+          ) {
+            try {
+              await navigator.share({
+                files: [file],
+                title: "Quran Verse",
+                text: `${surahName} — Verse ${ayatNumber.toString()}`,
+              });
+              shared = true;
+            } catch {
+              // User cancelled or API unavailable — fall through to download
+            }
+          }
+
+          if (!shared) {
+            // Fallback: download
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+          }
+          setIsGenerating(false);
+        },
+        "image/png",
+        1.0,
+      );
+    } catch {
+      setIsGenerating(false);
+    }
+  }, [
+    arabic,
+    urdu,
+    hindi,
+    english,
+    surahName,
+    surahNameArabic,
+    ayatNumber,
+    surahNumber,
+  ]);
+
+  return (
+    <button
+      type="button"
+      data-ocid="ayat.share_button"
+      onClick={handleShare}
+      disabled={isGenerating}
+      aria-label="Share verse as HD image"
+      className="inline-flex items-center gap-2 px-6 py-3 rounded-full text-sm font-semibold transition-all duration-200"
+      style={{
+        background: isGenerating
+          ? "oklch(var(--gold) / 0.6)"
+          : "oklch(var(--gold))",
+        color: "oklch(0.99 0 0)",
+        border: "1.5px solid oklch(var(--gold))",
+        fontFamily: "'Playfair Display', Georgia, serif",
+        boxShadow: "0 2px 14px oklch(var(--gold) / 0.35)",
+        cursor: isGenerating ? "not-allowed" : "pointer",
+        opacity: isGenerating ? 0.75 : 1,
+      }}
+    >
+      {isGenerating ? (
+        <>
+          <span
+            style={{
+              display: "inline-block",
+              width: "15px",
+              height: "15px",
+              border: "2px solid oklch(0.99 0 0 / 0.4)",
+              borderTopColor: "oklch(0.99 0 0)",
+              borderRadius: "50%",
+              animation: "spin 0.7s linear infinite",
+              flexShrink: 0,
+            }}
+          />
+          <span>Generating…</span>
+        </>
+      ) : (
+        <>
+          <Share2 size={15} strokeWidth={2} />
+          <span>Share as Image</span>
+        </>
+      )}
+    </button>
   );
 }
 
@@ -982,6 +1518,7 @@ export default function App() {
     totalParas,
     toggleSurah,
     isSurahComplete,
+    resetProgress,
   } = useReadingProgress();
 
   const totalCount =
@@ -1186,6 +1723,7 @@ export default function App() {
               totalSurahs={totalSurahs}
               totalParas={totalParas}
               onToggleSurah={toggleSurah}
+              onResetProgress={resetProgress}
             />
 
             {/* ===== 3. SURAH BADGE + MARK SURAH BUTTON — above Arabic ===== */}
@@ -1246,23 +1784,7 @@ export default function App() {
                 <GeometricRosette size={36} className="text-gold" />
               </div>
 
-              <div
-                data-ocid="ayat.arabic_text"
-                className="card-islamic rounded-2xl px-6 py-10 mb-6"
-                style={{
-                  background:
-                    "linear-gradient(135deg, oklch(var(--card)), oklch(var(--parchment)))",
-                }}
-              >
-                <p
-                  className="arabic-text arabic-glow text-foreground"
-                  lang="ar"
-                  dir="rtl"
-                  style={{ fontSize: "clamp(1.8rem, 5vw, 3rem)" }}
-                >
-                  {ayat.arabic}
-                </p>
-              </div>
+              <ArabicCard text={ayat.arabic} />
             </section>
 
             {/* ===== 5. NAVIGATION — directly below Arabic text ===== */}
@@ -1356,9 +1878,22 @@ export default function App() {
               />
             </section>
 
-            {/* ===== 8. MARK SURAH COMPLETE — below translations ===== */}
-            {currentSurahNumber !== null && (
-              <div className="flex justify-center fade-in-up fade-in-up-delay-4">
+            {/* ===== 8. SHARE + MARK SURAH COMPLETE — below translations ===== */}
+            <div className="flex flex-wrap justify-center gap-3 fade-in-up fade-in-up-delay-4">
+              {/* Share as HD Image */}
+              <ShareVerseButton
+                arabic={ayat.arabic}
+                urdu={ayat.urdu}
+                hindi={ayat.hindi}
+                english={ayat.english}
+                surahName={ayat.surahName}
+                surahNameArabic={ayat.surahNameArabic}
+                ayatNumber={ayat.ayatNumber}
+                surahNumber={ayat.surahNumber}
+              />
+
+              {/* Mark Surah Complete */}
+              {currentSurahNumber !== null && (
                 <button
                   type="button"
                   data-ocid="ayat.mark_surah_button"
@@ -1399,8 +1934,8 @@ export default function App() {
                     </>
                   )}
                 </button>
-              </div>
-            )}
+              )}
+            </div>
 
             {/* Bottom navigation hint */}
             <p className="text-center text-xs text-muted-foreground/50 tracking-wide pb-4">

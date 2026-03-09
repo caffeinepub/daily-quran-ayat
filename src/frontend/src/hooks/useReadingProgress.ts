@@ -27,6 +27,11 @@ export function useReadingProgress() {
     });
   }, []);
 
+  const resetProgress = useCallback(() => {
+    localStorage.removeItem(STORAGE_KEY);
+    setCompletedSurahs(new Set<number>());
+  }, []);
+
   const isSurahComplete = useCallback(
     (surahNumber: number) => completedSurahs.has(surahNumber),
     [completedSurahs],
@@ -45,6 +50,7 @@ export function useReadingProgress() {
     completedSurahs,
     toggleSurah,
     isSurahComplete,
+    resetProgress,
     completedCount: completedSurahs.size,
     totalSurahs: 114,
     completedParas,

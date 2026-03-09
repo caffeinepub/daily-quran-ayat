@@ -243,6 +243,12 @@
   animation: shimmer 1.8s infinite;
 }
 
+/* ===== Spin Animation (for loading states) ===== */
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
 /* ===== Fade-in Animation ===== */
 @keyframes fadeInUp {
   from {
