@@ -204,7 +204,7 @@ export const LOCAL_AYAT: LocalAyat[] = [
     ayatNumber: 2n,
     arabic: "اللَّهُ الصَّمَدُ",
     english: "Allah, the Eternal Refuge.",
-    hindi: "अल्लाह सबसे निरपेक्ष और निर्भर है।",
+    hindi: "अल्लाह सबसे निरपेक्ष और बेनियाज़ है।",
     urdu: "اللہ بے نیاز ہے۔",
   },
   {
@@ -214,7 +214,7 @@ export const LOCAL_AYAT: LocalAyat[] = [
     ayatNumber: 3n,
     arabic: "لَمْ يَلِدْ وَلَمْ يُولَدْ",
     english: "He neither begets nor is born,",
-    hindi: "वह पैदा नहीं करता और न ही पैदा किया जाता है।",
+    hindi: "न उसकी कोई संतान है और न वह किसी की संतान है।",
     urdu: "نہ اس کی کوئی اولاد ہے اور نہ وہ کسی کی اولاد ہے۔",
   },
   {

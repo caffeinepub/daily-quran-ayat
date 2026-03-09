@@ -3,6 +3,49 @@ import type { Ayat } from "../backend.d";
 import { LOCAL_TOTAL, getLocalAyatByIndex } from "../utils/localAyatData";
 import { useActor } from "./useActor";
 
+// ============================================================
+// Sanitize ayat from backend — fix known data quality issues:
+// - Devanagari (Hindi) text accidentally placed in the urdu field
+// - Urdu script accidentally placed in the hindi field
+// ============================================================
+const DEVANAGARI = /[\u0900-\u097F]/;
+const ARABIC_SCRIPT = /[\u0600-\u06FF\u0750-\u077F]/;
+
+function sanitizeAyat(ayat: Ayat): Ayat {
+  // If urdu field contains Devanagari, it's actually Hindi text — swap with correct Urdu from local fallback or blank it
+  const urduHasDevanagari = DEVANAGARI.test(ayat.urdu);
+  // If hindi field contains Arabic script, it's actually Urdu text
+  const hindiHasArabic =
+    ARABIC_SCRIPT.test(ayat.hindi) && !DEVANAGARI.test(ayat.hindi);
+
+  if (!urduHasDevanagari && !hindiHasArabic) return ayat;
+
+  // Look up correct data from local dataset
+  const key = `${Number(ayat.surahNumber)}-${Number(ayat.ayatNumber)}`;
+  for (let i = 0; i < LOCAL_TOTAL; i++) {
+    const local = getLocalAyatByIndex(BigInt(i));
+    if (`${Number(local.surahNumber)}-${Number(local.ayatNumber)}` === key) {
+      return {
+        ...ayat,
+        hindi:
+          urduHasDevanagari && hindiHasArabic
+            ? local.hindi
+            : hindiHasArabic
+              ? local.hindi
+              : ayat.hindi,
+        urdu: urduHasDevanagari ? local.urdu : ayat.urdu,
+      };
+    }
+  }
+
+  // No local match — clear the broken field rather than show garbage
+  return {
+    ...ayat,
+    hindi: hindiHasArabic ? ayat.english : ayat.hindi,
+    urdu: urduHasDevanagari ? "" : ayat.urdu,
+  };
+}
+
 export function useGetTodayAyat() {
   const { actor, isFetching } = useActor();
   return useQuery<Ayat>({
@@ -65,7 +108,7 @@ export function useGetAyatByIndex(index: bigint | null, enabled: boolean) {
       if (actor) {
         try {
           const result = await actor.getAyatByIndex(index);
-          return result;
+          return sanitizeAyat(result);
         } catch {
           // Canister offline — fall through to local data
         }

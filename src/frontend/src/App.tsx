@@ -371,127 +371,10 @@ function CandleDecor() {
 }
 
 // ============================================================
-// Reading Progress Bar — always visible below header
+// Unified Reading Progress Section — bar + collapsible details
 // ============================================================
 
-interface ReadingProgressBarProps {
-  completedCount: number;
-  totalSurahs: number;
-  completedParas: Set<number>;
-  totalParas: number;
-}
-
-function ReadingProgressBar({
-  completedCount,
-  totalSurahs,
-  completedParas,
-  totalParas,
-}: ReadingProgressBarProps) {
-  const pct = Math.round((completedCount / totalSurahs) * 100);
-
-  return (
-    <div
-      data-ocid="progress.bar"
-      className="relative z-10 px-4 py-3"
-      style={{
-        background: "oklch(var(--card) / 0.85)",
-        borderBottom: "1px solid oklch(var(--gold) / 0.2)",
-        backdropFilter: "blur(4px)",
-      }}
-    >
-      <div className="max-w-3xl mx-auto">
-        {/* Text row */}
-        <div className="flex items-center justify-between mb-2">
-          <div className="flex items-center gap-2">
-            <BookCheck
-              size={13}
-              style={{ color: "oklch(var(--gold))" }}
-              aria-hidden="true"
-            />
-            <span
-              className="text-xs font-semibold tracking-wide"
-              style={{
-                color: "oklch(var(--gold))",
-                fontFamily: "'Playfair Display', Georgia, serif",
-              }}
-            >
-              Reading Progress
-            </span>
-          </div>
-          <span
-            className="text-xs font-medium"
-            style={{
-              color: "oklch(var(--muted-foreground))",
-              fontFamily: "'Playfair Display', Georgia, serif",
-            }}
-            aria-live="polite"
-          >
-            {completedCount} of {totalSurahs} Surahs · {completedParas.size} of{" "}
-            {totalParas} Paras completed
-          </span>
-        </div>
-
-        {/* Gold shimmer progress bar */}
-        <div
-          className="relative overflow-hidden rounded-full"
-          style={{
-            height: "6px",
-            background: "oklch(var(--gold) / 0.12)",
-            border: "1px solid oklch(var(--gold) / 0.2)",
-          }}
-          role="progressbar"
-          tabIndex={0}
-          aria-valuenow={pct}
-          aria-valuemin={0}
-          aria-valuemax={100}
-          aria-label={`${pct}% of Quran completed`}
-        >
-          <div
-            className="h-full rounded-full transition-all duration-700 ease-out"
-            style={{
-              width: `${pct}%`,
-              background:
-                "linear-gradient(90deg, oklch(var(--gold-dim)), oklch(var(--gold-bright)), oklch(var(--gold)))",
-              boxShadow: pct > 0 ? "0 0 8px oklch(var(--gold) / 0.5)" : "none",
-              minWidth: pct > 0 ? "6px" : "0px",
-            }}
-          />
-          {/* Shimmer overlay */}
-          {pct > 0 && (
-            <div
-              className="absolute inset-0 rounded-full"
-              style={{
-                background:
-                  "linear-gradient(90deg, transparent 0%, oklch(1 0 0 / 0.35) 50%, transparent 100%)",
-                backgroundSize: "200% 100%",
-                animation: "shimmer 2.2s infinite",
-              }}
-            />
-          )}
-        </div>
-
-        {/* Percentage */}
-        {completedCount > 0 && (
-          <p
-            className="text-right text-xs mt-1 opacity-60"
-            style={{
-              color: "oklch(var(--gold))",
-              fontFamily: "'Playfair Display', Georgia, serif",
-            }}
-          >
-            {pct}% complete
-          </p>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ============================================================
-// Progress Panel — collapsible card for detailed progress
-// ============================================================
-
-interface ProgressPanelProps {
+interface ReadingProgressSectionProps {
   completedSurahs: Set<number>;
   completedParas: Set<number>;
   completedCount: number;
@@ -500,26 +383,28 @@ interface ProgressPanelProps {
   onToggleSurah: (surahNumber: number) => void;
 }
 
-function ProgressPanel({
+function ReadingProgressSection({
   completedSurahs,
   completedParas,
   completedCount,
   totalSurahs,
+  totalParas,
   onToggleSurah,
-}: ProgressPanelProps) {
+}: ReadingProgressSectionProps) {
   const [expanded, setExpanded] = useState(false);
+  const pct = Math.round((completedCount / totalSurahs) * 100);
 
   return (
     <section
       data-ocid="progress.panel"
       className="card-islamic rounded-xl fade-in-up fade-in-up-delay-1"
-      aria-label="Reading progress panel"
+      aria-label="Reading progress"
     >
-      {/* Header row — always visible */}
+      {/* Header row — always visible, acts as toggle */}
       <button
         type="button"
         onClick={() => setExpanded((v) => !v)}
-        className="w-full flex items-center gap-3 px-5 py-4"
+        className="w-full flex items-center gap-3 px-5 py-3"
         aria-expanded={expanded}
         aria-controls="progress-panel-body"
         style={{ background: "none", border: "none", cursor: "pointer" }}
@@ -544,8 +429,10 @@ function ProgressPanel({
             color: "oklch(var(--muted-foreground))",
             fontFamily: "'Playfair Display', Georgia, serif",
           }}
+          aria-live="polite"
         >
-          {completedCount}/{totalSurahs} Surahs
+          {completedCount}/{totalSurahs} Surahs · {completedParas.size}/
+          {totalParas} Paras
         </span>
         {expanded ? (
           <ChevronUp
@@ -559,6 +446,57 @@ function ProgressPanel({
           />
         )}
       </button>
+
+      {/* Gold shimmer progress bar — always visible */}
+      <div className="px-5 pb-3">
+        <div
+          className="relative overflow-hidden rounded-full"
+          style={{
+            height: "5px",
+            background: "oklch(var(--gold) / 0.12)",
+            border: "1px solid oklch(var(--gold) / 0.2)",
+          }}
+          role="progressbar"
+          tabIndex={0}
+          aria-valuenow={pct}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-label={`${pct}% of Quran completed`}
+        >
+          <div
+            className="h-full rounded-full transition-all duration-700 ease-out"
+            style={{
+              width: `${pct}%`,
+              background:
+                "linear-gradient(90deg, oklch(var(--gold-dim)), oklch(var(--gold-bright)), oklch(var(--gold)))",
+              boxShadow: pct > 0 ? "0 0 8px oklch(var(--gold) / 0.5)" : "none",
+              minWidth: pct > 0 ? "5px" : "0px",
+            }}
+          />
+          {pct > 0 && (
+            <div
+              className="absolute inset-0 rounded-full"
+              style={{
+                background:
+                  "linear-gradient(90deg, transparent 0%, oklch(1 0 0 / 0.35) 50%, transparent 100%)",
+                backgroundSize: "200% 100%",
+                animation: "shimmer 2.2s infinite",
+              }}
+            />
+          )}
+        </div>
+        {pct > 0 && (
+          <p
+            className="text-right text-xs mt-1 opacity-50"
+            style={{
+              color: "oklch(var(--gold))",
+              fontFamily: "'Playfair Display', Georgia, serif",
+            }}
+          >
+            {pct}%
+          </p>
+        )}
+      </div>
 
       {/* Collapsible body */}
       {expanded && (
@@ -657,7 +595,6 @@ function ProgressPanel({
                         : "1px solid oklch(var(--border) / 0.6)",
                     }}
                   >
-                    {/* Number */}
                     <span
                       className="text-xs font-bold w-6 text-center flex-shrink-0"
                       style={{
@@ -669,7 +606,6 @@ function ProgressPanel({
                     >
                       {surah.surahNumber}
                     </span>
-                    {/* Name */}
                     <span
                       className="flex-1 text-xs font-medium truncate"
                       style={{
@@ -681,7 +617,6 @@ function ProgressPanel({
                     >
                       {surah.name}
                     </span>
-                    {/* Arabic name */}
                     <span
                       className="text-xs arabic-text opacity-60 flex-shrink-0"
                       lang="ar"
@@ -690,7 +625,6 @@ function ProgressPanel({
                     >
                       {surah.arabicName}
                     </span>
-                    {/* Checkmark */}
                     <div className="flex-shrink-0 w-4 h-4 flex items-center justify-center">
                       {done ? (
                         <CheckCircle2
@@ -1223,14 +1157,6 @@ export default function App() {
         </div>
       </header>
 
-      {/* ===== READING PROGRESS BAR — below header, always visible ===== */}
-      <ReadingProgressBar
-        completedCount={completedCount}
-        totalSurahs={totalSurahs}
-        completedParas={completedParas}
-        totalParas={totalParas}
-      />
-
       {/* ===== MAIN CONTENT ===== */}
       <main className="relative z-10 pb-20">
         {isLoading && <AyatSkeleton />}
@@ -1252,8 +1178,8 @@ export default function App() {
             {/* ===== 1. JUMP TO FILTER — TOP ===== */}
             <JumpToFilter onJump={handleJump} isSwitching={isSwitching} />
 
-            {/* ===== 2. PROGRESS PANEL — collapsible ===== */}
-            <ProgressPanel
+            {/* ===== 2. UNIFIED READING PROGRESS — bar + collapsible details ===== */}
+            <ReadingProgressSection
               completedSurahs={completedSurahs}
               completedParas={completedParas}
               completedCount={completedCount}
@@ -1290,50 +1216,6 @@ export default function App() {
                 <span>Surah {ayat.surahNumber.toString()}</span>
                 <IslamicStar size={14} className="text-gold flex-shrink-0" />
               </div>
-
-              {/* Mark Surah Complete / Completed button */}
-              {currentSurahNumber !== null && (
-                <button
-                  type="button"
-                  data-ocid="ayat.mark_surah_button"
-                  onClick={() => toggleSurah(currentSurahNumber)}
-                  aria-pressed={isCurrentSurahComplete}
-                  aria-label={
-                    isCurrentSurahComplete
-                      ? `Unmark ${ayat.surahName} as complete`
-                      : `Mark ${ayat.surahName} as complete`
-                  }
-                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-semibold transition-all duration-250"
-                  style={
-                    isCurrentSurahComplete
-                      ? {
-                          background: "oklch(var(--gold))",
-                          color: "oklch(0.99 0 0)",
-                          border: "1.5px solid oklch(var(--gold))",
-                          fontFamily: "'Playfair Display', Georgia, serif",
-                          boxShadow: "0 2px 12px oklch(var(--gold) / 0.35)",
-                        }
-                      : {
-                          background: "transparent",
-                          color: "oklch(var(--gold))",
-                          border: "1.5px solid oklch(var(--gold) / 0.5)",
-                          fontFamily: "'Playfair Display', Georgia, serif",
-                        }
-                  }
-                >
-                  {isCurrentSurahComplete ? (
-                    <>
-                      <CheckCircle2 size={15} strokeWidth={2.5} />
-                      <span>✓ Surah Completed</span>
-                    </>
-                  ) : (
-                    <>
-                      <BookOpen size={15} strokeWidth={2} />
-                      <span>Mark Surah Complete</span>
-                    </>
-                  )}
-                </button>
-              )}
             </section>
 
             {/* ===== 4. ARABIC TEXT SECTION ===== */}
@@ -1473,6 +1355,52 @@ export default function App() {
                 speechLang="en-US"
               />
             </section>
+
+            {/* ===== 8. MARK SURAH COMPLETE — below translations ===== */}
+            {currentSurahNumber !== null && (
+              <div className="flex justify-center fade-in-up fade-in-up-delay-4">
+                <button
+                  type="button"
+                  data-ocid="ayat.mark_surah_button"
+                  onClick={() => toggleSurah(currentSurahNumber)}
+                  aria-pressed={isCurrentSurahComplete}
+                  aria-label={
+                    isCurrentSurahComplete
+                      ? `Unmark ${ayat.surahName} as complete`
+                      : `Mark ${ayat.surahName} as complete`
+                  }
+                  className="inline-flex items-center gap-2 px-6 py-3 rounded-full text-sm font-semibold transition-all duration-250"
+                  style={
+                    isCurrentSurahComplete
+                      ? {
+                          background: "oklch(var(--gold))",
+                          color: "oklch(0.99 0 0)",
+                          border: "1.5px solid oklch(var(--gold))",
+                          fontFamily: "'Playfair Display', Georgia, serif",
+                          boxShadow: "0 2px 12px oklch(var(--gold) / 0.35)",
+                        }
+                      : {
+                          background: "transparent",
+                          color: "oklch(var(--gold))",
+                          border: "1.5px solid oklch(var(--gold) / 0.5)",
+                          fontFamily: "'Playfair Display', Georgia, serif",
+                        }
+                  }
+                >
+                  {isCurrentSurahComplete ? (
+                    <>
+                      <CheckCircle2 size={15} strokeWidth={2.5} />
+                      <span>✓ Surah Completed</span>
+                    </>
+                  ) : (
+                    <>
+                      <BookOpen size={15} strokeWidth={2} />
+                      <span>Mark Surah Complete</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            )}
 
             {/* Bottom navigation hint */}
             <p className="text-center text-xs text-muted-foreground/50 tracking-wide pb-4">
